@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>CSV / Excel 轉 JSON & Markdown - 離線工具箱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-3 lg:p-5 min-h-screen">
+  <div class="max-w-[1720px] mx-auto">
+    <div id="header-mount"></div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6 space-y-4">
+      
+      <!-- 標題列 -->
+      <div class="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-slate-200">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">CSV / Excel 資料格式轉換器</h2>
+          <p class="text-xs text-slate-500">貼上 CSV 或自 Excel 複製的表格，快速轉換為 JSON、Markdown 表格或 HTML</p>
+        </div>
+        <div class="flex gap-2">
+          <label class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 cursor-pointer transition-colors inline-flex items-center gap-1">
+            <span>📁</span> 載入 CSV 檔案
+            <input type="file" accept=".csv,.txt,.tsv" class="hidden" onchange="handleFile(event)">
+          </label>
+          <button onclick="loadSample()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition-colors">載入範例</button>
+          <button onclick="clearAll()" class="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-lg border border-slate-300 transition-colors">清空</button>
+        </div>
+      </div>
+
+      <!-- 操作配置列 -->
+      <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+        <div class="flex flex-wrap items-center gap-3">
+          <label class="flex items-center gap-1.5 font-medium cursor-pointer">
+            <input type="checkbox" id="opt-header" checked onchange="convert()" class="rounded text-blue-600 focus:ring-blue-500">
+            <span>第一行作為標題 (Header)</span>
+          </label>
+          <label class="flex items-center gap-1.5 font-medium cursor-pointer">
+            <input type="checkbox" id="opt-parse-types" checked onchange="convert()" class="rounded text-blue-600 focus:ring-blue-500">
+            <span>自動解析數字/布林 (JSON 模式)</span>
+          </label>
+
+          <div class="flex items-center gap-1.5 ml-2">
+            <span class="text-slate-500 font-medium">分隔符號:</span>
+            <select id="opt-delimiter" onchange="convert()" class="bg-white border border-slate-300 rounded-md px-2 py-1 text-xs">
+              <option value="auto">自動偵測 (, 或 Tab)</option>
+              <option value=",">逗號 (,)</option>
+              <option value="&#9;">Tab (Excel 貼上)</option>
+              <option value=";">分號 (;)</option>
+              <option value="|">豎線 (|)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 輸出格式選擇 -->
+        <div class="inline-flex p-1 bg-white rounded-lg border border-slate-300 text-xs">
+          <button id="tab-json" onclick="setTargetFormat('json')" class="px-3 py-1 font-bold rounded-md bg-blue-600 text-white shadow-xs">JSON</button>
+          <button id="tab-md" onclick="setTargetFormat('markdown')" class="px-3 py-1 font-semibold rounded-md text-slate-600 hover:text-slate-900">Markdown</button>
+          <button id="tab-html" onclick="setTargetFormat('html')" class="px-3 py-1 font-semibold rounded-md text-slate-600 hover:text-slate-900">HTML Table</button>
+          <button id="tab-sql" onclick="setTargetFormat('sql')" class="px-3 py-1 font-semibold rounded-md text-slate-600 hover:text-slate-900">SQL Insert</button>
+        </div>
+      </div>
+
+      <!-- 核心雙欄工作區 -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div>
+          <div class="flex justify-between items-center text-xs font-bold text-slate-700 mb-1.5">
+            <span>CSV / Excel 資料輸入</span>
+            <span id="stat-in" class="font-mono-num font-normal text-slate-400">0 行</span>
+          </div>
+          <textarea id="csv-in" rows="18" oninput="convert()" placeholder="在此貼上 CSV 文本或直接由 Excel / Google Sheets 複製儲存格後貼上..." class="w-full font-mono-num text-xs sm:text-sm p-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center text-xs font-bold text-slate-700 mb-1.5">
+            <span id="output-title">轉換結果 (JSON)</span>
+            <div class="flex items-center gap-2">
+              <span id="stat-out" class="font-mono-num font-normal text-slate-400">0 字元</span>
+              <button onclick="Utils.copyText('csv-out', this)" class="px-2.5 py-1 bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors">複製結果</button>
+            </div>
+          </div>
+          <textarea id="csv-out" rows="18" readonly placeholder="轉換後的內容將顯示在此處..." class="w-full font-mono-num text-xs sm:text-sm p-3.5 bg-slate-100/70 border border-slate-300 rounded-xl focus:outline-none"></textarea>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="nav.js"></script>
+  <script>
+    let targetFormat = 'json';
+
+    function setTargetFormat(fmt) {
+      targetFormat = fmt;
+      const tabs = ['json', 'markdown', 'html', 'sql'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-${t === 'markdown' ? 'md' : t}`);
+        if (!btn) return;
+        if (t === fmt) {
+          btn.className = 'px-3 py-1 font-bold rounded-md bg-blue-600 text-white shadow-xs';
+        } else {
+          btn.className = 'px-3 py-1 font-semibold rounded-md text-slate-600 hover:text-slate-900';
+        }
+      });
+
+      const titleMap = { json: 'JSON', markdown: 'Markdown 表格', html: 'HTML Table', sql: 'SQL Insert 語句' };
+      document.getElementById('output-title').textContent = `轉換結果 (${titleMap[fmt]})`;
+      convert();
+    }
+
+    // RFC 4180 標準 CSV 解析器
+    function parseCSV(text, delimiter) {
+      if (!text.trim()) return [];
+      
+      // 自動偵測分隔符
+      if (delimiter === 'auto') {
+        const firstLine = text.split('\n')[0] || '';
+        const countTab = (firstLine.match(/\t/g) || []).length;
+        const countComma = (firstLine.match(/,/g) || []).length;
+        const countSemi = (firstLine.match(/;/g) || []).length;
+        if (countTab > countComma && countTab > countSemi) delimiter = '\t';
+        else if (countSemi > countComma) delimiter = ';';
+        else delimiter = ',';
+      }
+
+      const rows = [];
+      let currentRow = [];
+      let currentField = '';
+      let insideQuote = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        if (c === '"') {
+          if (insideQuote && next === '"') {
+            currentField += '"';
+            i++;
+          } else {
+            insideQuote = !insideQuote;
+          }
+        } else if (c === delimiter && !insideQuote) {
+          currentRow.push(currentField.trim());
+          currentField = '';
+        } else if ((c === '\r' || c === '\n') && !insideQuote) {
+          if (c === '\r' && next === '\n') i++;
+          currentRow.push(currentField.trim());
+          if (currentRow.some(f => f !== '')) rows.push(currentRow);
+          currentRow = [];
+          currentField = '';
+        } else {
+          currentField += c;
+        }
+      }
+
+      if (currentField !== '' || currentRow.length > 0) {
+        currentRow.push(currentField.trim());
+        if (currentRow.some(f => f !== '')) rows.push(currentRow);
+      }
+
+      return rows;
+    }
+
+    function convert() {
+      const raw = document.getElementById('csv-in').value;
+      const delim = document.getElementById('opt-delimiter').value;
+      const hasHeader = document.getElementById('opt-header').checked;
+      const parseTypes = document.getElementById('opt-parse-types').checked;
+      const outEl = document.getElementById('csv-out');
+
+      document.getElementById('stat-in').textContent = `${raw.trim() ? raw.trim().split('\n').length : 0} 行`;
+
+      if (!raw.trim()) {
+        outEl.value = '';
+        document.getElementById('stat-out').textContent = '0 字元';
+        return;
+      }
+
+      const rows = parseCSV(raw, delim);
+      if (rows.length === 0) {
+        outEl.value = '';
+        return;
+      }
+
+      let resultStr = '';
+
+      if (targetFormat === 'json') {
+        if (hasHeader && rows.length > 1) {
+          const headers = rows[0];
+          const data = rows.slice(1).map(row => {
+            const obj = {};
+            headers.forEach((h, i) => {
+              let val = row[i] !== undefined ? row[i] : '';
+              if (parseTypes) {
+                if (/^-?\d+(\.\d+)?$/.test(val)) val = Number(val);
+                else if (val.toLowerCase() === 'true') val = true;
+                else if (val.toLowerCase() === 'false') val = false;
+                else if (val === '' || val.toLowerCase() === 'null') val = null;
+              }
+              obj[h || `col_${i+1}`] = val;
+            });
+            return obj;
+          });
+          resultStr = JSON.stringify(data, null, 2);
+        } else {
+          resultStr = JSON.stringify(rows, null, 2);
+        }
+      } else if (targetFormat === 'markdown') {
+        const colCount = Math.max(...rows.map(r => r.length));
+        const normalized = rows.map(r => Array.from({ length: colCount }, (_, i) => r[i] || ''));
+        
+        let headerRow = normalized[0];
+        let bodyRows = normalized.slice(1);
+
+        if (!hasHeader) {
+          headerRow = Array.from({ length: colCount }, (_, i) => `Col ${i + 1}`);
+          bodyRows = normalized;
+        }
+
+        const lines = [];
+        lines.push(`| ${headerRow.join(' | ')} |`);
+        lines.push(`| ${Array(colCount).fill('---').join(' | ')} |`);
+        bodyRows.forEach(r => lines.push(`| ${r.join(' | ')} |`));
+        resultStr = lines.join('\n');
+      } else if (targetFormat === 'html') {
+        let html = '<table border="1">\n';
+        if (hasHeader && rows.length > 0) {
+          html += '  <thead>\n    <tr>\n';
+          rows[0].forEach(h => { html += `      <th>${escapeHtml(h)}</th>\n`; });
+          html += '    </tr>\n  </thead>\n';
+        }
+        html += '  <tbody>\n';
+        const bodyRows = hasHeader ? rows.slice(1) : rows;
+        bodyRows.forEach(r => {
+          html += '    <tr>\n';
+          r.forEach(c => { html += `      <td>${escapeHtml(c)}</td>\n`; });
+          html += '    </tr>\n';
+        });
+        html += '  </tbody>\n</table>';
+        resultStr = html;
+      } else if (targetFormat === 'sql') {
+        const tableName = 'products';
+        if (hasHeader && rows.length > 1) {
+          const headers = rows[0].map(h => `\`${h.replace(/`/g, '')}\``).join(', ');
+          const inserts = rows.slice(1).map(r => {
+            const vals = r.map(v => {
+              if (v === '' || v.toLowerCase() === 'null') return 'NULL';
+              if (!isNaN(v) && v.trim() !== '') return v;
+              return `'${v.replace(/'/g, "''")}'`;
+            }).join(', ');
+            return `INSERT INTO \`${tableName}\` (${headers}) VALUES (${vals});`;
+          });
+          resultStr = inserts.join('\n');
+        } else {
+          resultStr = '-- 請勾選「第一行作為標題」以生成 SQL Insert 欄位名稱';
+        }
+      }
+
+      outEl.value = resultStr;
+      document.getElementById('stat-out').textContent = `${resultStr.length} 字元`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function loadSample() {
+      // 通用商品庫存範例（包含數字、字串、浮點數與布林值）
+      document.getElementById('csv-in').value = 
+`sku,product_name,category,price,stock,in_stock
+SKU-1001,Wireless Ergonomic Mouse,Electronics,49.99,120,true
+SKU-1002,Mechanical Gaming Keyboard,Electronics,129.50,45,true
+SKU-1003,USB-C Multiport Hub,Accessories,34.00,0,false
+SKU-1004,Adjustable Laptop Stand,Office,28.75,80,true
+SKU-1005,Noise Cancelling Headphones,Audio,199.99,15,true`;
+      convert();
+    }
+
+    function clearAll() {
+      document.getElementById('csv-in').value = '';
+      convert();
+    }
+
+    function handleFile(e) {
+      const f = e.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        document.getElementById('csv-in').value = ev.target.result;
+        convert();
+      };
+      reader.readAsText(f);
+      e.target.value = '';
+    }
+
+    window.addEventListener('DOMContentLoaded', loadSample);
+  </script>
+</body>
+</html>

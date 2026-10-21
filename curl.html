@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>cURL 指令生成器 - 離線工具箱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-3 lg:p-5 min-h-screen">
+  <div class="max-w-[1720px] mx-auto">
+    <div id="header-mount"></div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6 space-y-4">
+      <div class="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-slate-200">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">cURL 請求指令生成與代碼轉換器</h2>
+          <p class="text-xs text-slate-500">視覺化配置 HTTP 請求，即時生成標準 cURL 指令與前端/後端代碼</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="loadSample()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300">範例請求</button>
+          <button onclick="clearAll()" class="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-lg border border-slate-300">清空</button>
+        </div>
+      </div>
+
+      <!-- 請求位址與方法 -->
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="req-method" onchange="buildCurl()" class="font-mono-num font-bold text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="GET">GET</option>
+          <option value="POST" selected>POST</option>
+          <option value="PUT">PUT</option>
+          <option value="PATCH">PATCH</option>
+          <option value="DELETE">DELETE</option>
+        </select>
+        <input type="text" id="req-url" oninput="buildCurl()" value="https://api.example.com/v1/orders" placeholder="https://api.example.com/..." class="flex-1 font-mono-num text-xs sm:text-sm p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+
+      <!-- 核心選項卡：Headers 與 Body -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- 左側：標頭 (Headers) -->
+        <div class="border border-slate-200 rounded-xl p-3.5 space-y-2 bg-slate-50/50">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-slate-700">Headers (請求標頭)</span>
+            <button onclick="addHeaderRow()" class="text-xs text-blue-600 hover:underline font-semibold">+ 新增標頭</button>
+          </div>
+          <div id="headers-list" class="space-y-2 max-h-[170px] overflow-y-auto"></div>
+        </div>
+
+        <!-- 右側：請求主體 (Body) -->
+        <div class="border border-slate-200 rounded-xl p-3.5 space-y-2 bg-slate-50/50">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-slate-700">Request Body (JSON / Raw)</span>
+            <span class="text-[11px] text-slate-400">僅非 GET 請求生效</span>
+          </div>
+          <textarea id="req-body" rows="6" oninput="buildCurl()" placeholder='{ "item_id": 1001, "quantity": 2 }' class="w-full font-mono-num text-xs p-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+      </div>
+
+      <!-- 輸出選項卡 -->
+      <div class="space-y-2 pt-2">
+        <div class="flex justify-between items-center">
+          <div class="inline-flex p-1 bg-slate-100 rounded-lg border border-slate-300 text-xs font-semibold">
+            <button id="tab-curl" onclick="setOutputTab('curl')" class="px-3 py-1 rounded-md bg-blue-600 text-white shadow-xs">cURL 指令</button>
+            <button id="tab-fetch" onclick="setOutputTab('fetch')" class="px-3 py-1 rounded-md text-slate-600 hover:text-slate-900">JavaScript (Fetch)</button>
+            <button id="tab-python" onclick="setOutputTab('python')" class="px-3 py-1 rounded-md text-slate-600 hover:text-slate-900">Python (Requests)</button>
+          </div>
+          <button onclick="Utils.copyText('cmd-output', this)" class="px-3 py-1 bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold rounded-lg hover:bg-blue-100">複製結果</button>
+        </div>
+
+        <textarea id="cmd-output" rows="7" readonly class="w-full font-mono-num text-xs sm:text-sm p-3.5 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 focus:outline-none"></textarea>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="nav.js"></script>
+  <script>
+    let currentTab = 'curl';
+
+    function addHeaderRow(key = '', val = '') {
+      const container = document.getElementById('headers-list');
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2';
+      row.innerHTML = `
+        <input type="text" placeholder="Key (如 Authorization)" value="${key}" oninput="buildCurl()" class="h-key flex-1 font-mono-num text-xs p-1.5 bg-white border border-slate-300 rounded">
+        <input type="text" placeholder="Value (如 Bearer token)" value="${val}" oninput="buildCurl()" class="h-val flex-1 font-mono-num text-xs p-1.5 bg-white border border-slate-300 rounded">
+        <button onclick="this.parentElement.remove(); buildCurl();" class="text-rose-500 hover:text-rose-700 text-xs px-1">✕</button>
+      `;
+      container.appendChild(row);
+      buildCurl();
+    }
+
+    function getHeaders() {
+      const keys = document.querySelectorAll('.h-key');
+      const vals = document.querySelectorAll('.h-val');
+      const headers = [];
+      keys.forEach((k, idx) => {
+        const key = k.value.trim();
+        const val = vals[idx].value.trim();
+        if (key) headers.push({ key, val });
+      });
+      return headers;
+    }
+
+    function buildCurl() {
+      const method = document.getElementById('req-method').value;
+      const url = document.getElementById('req-url').value.trim() || 'https://api.example.com';
+      const headers = getHeaders();
+      const body = document.getElementById('req-body').value.trim();
+
+      if (currentTab === 'curl') {
+        let cmd = `curl -X ${method} "${url}"`;
+        headers.forEach(h => { cmd += ` \\\n  -H "${h.key}: ${h.val}"`; });
+        if (method !== 'GET' && body) {
+          cmd += ` \\\n  -d '${body.replace(/'/g, "'\\''")}'`;
+        }
+        document.getElementById('cmd-output').value = cmd;
+      } else if (currentTab === 'fetch') {
+        const hObj = {};
+        headers.forEach(h => { hObj[h.key] = h.val; });
+        const opts = { method, headers: hObj };
+        if (method !== 'GET' && body) opts.body = body;
+        
+        let fetchCode = `fetch("${url}", {\n`;
+        fetchCode += `  method: "${method}",\n`;
+        fetchCode += `  headers: ${JSON.stringify(hObj, null, 4).replace(/\n/g, '\n  ')},\n`;
+        if (method !== 'GET' && body) {
+          fetchCode += `  body: JSON.stringify(${body})\n`;
+        }
+        fetchCode += `})\n  .then(res => res.json())\n  .then(data => console.log(data))\n  .catch(err => console.error(err));`;
+        document.getElementById('cmd-output').value = fetchCode;
+      } else if (currentTab === 'python') {
+        let py = `import requests\n\nurl = "${url}"\n`;
+        let hDict = 'headers = {\n' + headers.map(h => `    "${h.key}": "${h.val}"`).join(',\n') + '\n}\n';
+        py += hDict;
+        if (method !== 'GET' && body) {
+          py += `data = '''${body}'''\n\n`;
+          py += `response = requests.${method.toLowerCase()}(url, headers=headers, data=data)\n`;
+        } else {
+          py += `\nresponse = requests.${method.toLowerCase()}(url, headers=headers)\n`;
+        }
+        py += `print(response.status_code)\nprint(response.text)`;
+        document.getElementById('cmd-output').value = py;
+      }
+    }
+
+    function setOutputTab(tab) {
+      currentTab = tab;
+      ['curl', 'fetch', 'python'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        btn.className = t === tab ? 'px-3 py-1 rounded-md bg-blue-600 text-white shadow-xs' : 'px-3 py-1 rounded-md text-slate-600 hover:text-slate-900';
+      });
+      buildCurl();
+    }
+
+    function loadSample() {
+      document.getElementById('req-method').value = 'POST';
+      document.getElementById('req-url').value = 'https://httpbin.org/post';
+      document.getElementById('headers-list').innerHTML = '';
+      addHeaderRow('Content-Type', 'application/json');
+      addHeaderRow('Authorization', 'Bearer demo_secret_key');
+      document.getElementById('req-body').value = JSON.stringify({ order_id: 8820, client: "Offline Tool" }, null, 2);
+      buildCurl();
+    }
+
+    function clearAll() {
+      document.getElementById('req-url').value = '';
+      document.getElementById('headers-list').innerHTML = '';
+      document.getElementById('req-body').value = '';
+      buildCurl();
+    }
+
+    window.addEventListener('DOMContentLoaded', loadSample);
+  </script>
+</body>
+</html>

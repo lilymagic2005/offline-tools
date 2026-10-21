@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>CSS 顏色轉換器 - 離線工具箱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-3 lg:p-5 min-h-screen">
+  <div class="max-w-[1720px] mx-auto">
+    <div id="header-mount"></div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6 space-y-5">
+      <div class="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-slate-200">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">CSS / 顏色模型轉換器</h2>
+          <p class="text-xs text-slate-500">HEX, RGB, HSL 雙向聯動計算與 CSS 常用代碼產生</p>
+        </div>
+      </div>
+
+      <!-- 取色預覽區 -->
+      <div class="flex flex-col sm:flex-row items-center gap-5 p-5 bg-slate-50 border border-slate-200 rounded-xl">
+        <div id="preview-box" class="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl shadow-md border-2 border-white transition-colors duration-200 shrink-0" style="background-color: #2563eb;"></div>
+        <div class="flex-1 space-y-2 w-full text-center sm:text-left">
+          <div class="flex flex-wrap items-center gap-3 justify-center sm:justify-start">
+            <label class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer hover:border-blue-500 shadow-xs inline-flex items-center gap-2">
+              <span>點此調色盤取色</span>
+              <input type="color" id="native-picker" value="#2563eb" oninput="updateFromPicker(this.value)" class="w-6 h-6 border-none cursor-pointer">
+            </label>
+            <span class="text-xs text-slate-400">鍵入任意格式數值即可同步所有欄位</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 顏色欄位卡片網格 -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="color-cards">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5">
+          <span class="text-xs font-bold text-slate-700">HEX 色碼</span>
+          <div class="flex gap-2">
+            <input type="text" id="val-hex" oninput="updateFromHex(this.value)" value="#2563EB" class="font-mono-num text-sm p-2.5 bg-white border border-slate-300 rounded-lg flex-1">
+            <button onclick="Utils.copyText('val-hex', this)" class="px-3 bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold rounded-lg hover:bg-blue-100">複製</button>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5">
+          <span class="text-xs font-bold text-slate-700">RGB 格式</span>
+          <div class="flex gap-2">
+            <input type="text" id="val-rgb" oninput="updateFromRgb(this.value)" value="rgb(37, 99, 235)" class="font-mono-num text-sm p-2.5 bg-white border border-slate-300 rounded-lg flex-1">
+            <button onclick="Utils.copyText('val-rgb', this)" class="px-3 bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold rounded-lg hover:bg-blue-100">複製</button>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5">
+          <span class="text-xs font-bold text-slate-700">HSL 格式</span>
+          <div class="flex gap-2">
+            <input type="text" id="val-hsl" oninput="updateFromHsl(this.value)" value="hsl(221, 83%, 53%)" class="font-mono-num text-sm p-2.5 bg-white border border-slate-300 rounded-lg flex-1">
+            <button onclick="Utils.copyText('val-hsl', this)" class="px-3 bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold rounded-lg hover:bg-blue-100">複製</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CSS 常用樣式代碼區 -->
+      <div class="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
+        <span class="text-xs font-bold text-slate-700 block">CSS 代碼快速預覽</span>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono-num">
+          <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+            <span id="css-bg">background-color: #2563EB;</span>
+            <button onclick="Utils.copyText('css-bg', this)" class="text-blue-600 text-xs px-2">複製</button>
+          </div>
+          <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+            <span id="css-grad">background: linear-gradient(135deg, #2563EB, #60a5fa);</span>
+            <button onclick="Utils.copyText('css-grad', this)" class="text-blue-600 text-xs px-2">複製</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="nav.js"></script>
+  <script>
+    function hexToRgb(hex) {
+      hex = hex.replace(/^#/, '');
+      if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
+      const n = parseInt(hex, 16);
+      if (isNaN(n) || hex.length !== 6) return null;
+      return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('').toUpperCase();
+    }
+
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) { h = s = 0; }
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+      }
+      return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+
+    function renderAll(r, g, b) {
+      const hex = rgbToHex(r, g, b);
+      const hsl = rgbToHsl(r, g, b);
+
+      document.getElementById('preview-box').style.backgroundColor = hex;
+      document.getElementById('native-picker').value = hex.toLowerCase();
+      document.getElementById('val-hex').value = hex;
+      document.getElementById('val-rgb').value = `rgb(${r}, ${g}, ${b})`;
+      document.getElementById('val-hsl').value = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+      document.getElementById('css-bg').textContent = `background-color: ${hex};`;
+      document.getElementById('css-grad').textContent = `background: linear-gradient(135deg, ${hex}, #ffffff);`;
+    }
+
+    function updateFromPicker(val) {
+      const rgb = hexToRgb(val);
+      if (rgb) renderAll(rgb.r, rgb.g, rgb.b);
+    }
+
+    function updateFromHex(val) {
+      const rgb = hexToRgb(val);
+      if (rgb) renderAll(rgb.r, rgb.g, rgb.b);
+    }
+
+    function updateFromRgb(val) {
+      const m = val.match(/\d+/g);
+      if (m && m.length >= 3) renderAll(Number(m[0]), Number(m[1]), Number(m[2]));
+    }
+
+    function updateFromHsl(val) {
+      const m = val.match(/\d+/g);

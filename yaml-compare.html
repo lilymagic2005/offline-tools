@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>多 YAML 設定比對器 - 離線工具箱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-3 lg:p-5 min-h-screen">
+  <div class="max-w-[1720px] mx-auto">
+    <div id="header-mount"></div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6 space-y-4">
+      
+      <!-- 標題列 -->
+      <div class="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-slate-200">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">多 YAML 設定比對器 (Multi-YAML Compare)</h2>
+          <p class="text-xs text-slate-500">同時載入多個環境的 YAML 配置，檢測屬性差異、缺失欄位與多餘設定</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <label class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg cursor-pointer transition-colors inline-flex items-center gap-1 shadow-xs">
+            <span>📁</span> 選擇多個 YAML 檔案
+            <input type="file" id="yaml-file-input" multiple accept=".yml,.yaml,.txt" class="hidden" onchange="handleFiles(event)">
+          </label>
+          <button onclick="addTextFileSlot()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition-colors">+ 手動新增欄位</button>
+          <button onclick="loadSample()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition-colors">載入範例 (Dev/UAT/Prod)</button>
+          <button onclick="clearAll()" class="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-lg border border-slate-300 transition-colors">清空</button>
+        </div>
+      </div>
+
+      <!-- YAML 文本輸入區塊（水平排列，可自由增刪） -->
+      <div id="files-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+
+      <!-- 分析結果控制條 -->
+      <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-slate-500 font-medium">篩選檢視:</span>
+          <button id="filter-diff" onclick="setFilter('diff')" class="px-2.5 py-1 font-bold rounded bg-blue-600 text-white shadow-xs">僅看數值差異 / 遺漏</button>
+          <button id="filter-missing" onclick="setFilter('missing')" class="px-2.5 py-1 font-semibold rounded bg-white border border-slate-300 text-slate-700 hover:text-slate-900">僅看缺少鍵 (Missing/Extra)</button>
+          <button id="filter-all" onclick="setFilter('all')" class="px-2.5 py-1 font-semibold rounded bg-white border border-slate-300 text-slate-700 hover:text-slate-900">全部屬性 (All Keys)</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input type="text" id="filter-search" oninput="renderTable()" placeholder="搜尋屬性 Key 或 Value..." class="px-2.5 py-1 bg-white border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 w-44">
+          <button onclick="copyMarkdownSummary(this)" class="px-2.5 py-1 bg-blue-50 text-blue-600 border border-blue-200 font-semibold rounded hover:bg-blue-100">複製比對結果 (Markdown)</button>
+        </div>
+      </div>
+
+      <!-- 比對矩陣表格 -->
+      <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
+        <div class="overflow-x-auto max-h-[500px]">
+          <table class="w-full text-left text-xs font-mono-num border-collapse" id="diff-table">
+            <thead class="bg-slate-100 sticky top-0 border-b border-slate-200 text-slate-700 select-none z-10" id="table-head"></thead>
+            <tbody class="divide-y divide-slate-100" id="table-body">
+              <tr><td class="p-4 text-center text-slate-400 font-sans" colspan="10">載入或貼上 YAML 檔案以開始分析</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="nav.js"></script>
+  <script>
+    let filesData = []; // [{ id, name, content, obj, flat }]
+    let currentFilter = 'diff';
+
+    // 輕量純前端 YAML 解析器（支援純 key-value, 巢狀縮排、數字、布林與字串）
+    function parseYAML(yamlText) {
+      const lines = yamlText.split(/\r?\n/);
+      const root = {};
+      const stack = [{ indent: -1, obj: root }];
+
+      lines.forEach(rawLine => {
+        // 排除註解與空白行
+        const line = rawLine.replace(/#.*$/, '');
+        if (!line.trim()) return;
+
+        const indent = rawLine.search(/\S/);
+        const match = line.trim().match(/^([\w.\-_]+)\s*:\s*(.*)$/);
+        if (!match) return;
+
+        const key = match[1];
+        let valStr = match[2].trim();
+
+        while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+          stack.pop();
+        }
+
+        const parent = stack[stack.length - 1].obj;
+
+        if (valStr === '') {
+          // 巢狀物件節點
+          parent[key] = {};
+          stack.push({ indent: indent, obj: parent[key] });
+        } else {
+          // 基礎純量值
+          let val = valStr;
+          if (valStr === 'true') val = true;
+          else if (valStr === 'false') val = false;
+          else if (valStr === 'null' || valStr === '~') val = null;
+          else if (!isNaN(valStr) && valStr !== '') val = Number(valStr);
+          else if ((valStr.startsWith('"') && valStr.endsWith('"')) || (valStr.startsWith("'") && valStr.endsWith("'"))) {
+            val = valStr.slice(1, -1);
+          }
+          parent[key] = val;
+        }
+      });
+
+      return root;
+    }
+
+    // 將巢狀物件扁平化為單層 path: a.b.c
+    function flattenObject(obj, prefix = '') {
+      let res = {};
+      for (const k in obj) {
+        if (!obj.hasOwnProperty(k)) continue;
+        const val = obj[k];
+        const newKey = prefix ? `${prefix}.${k}` : k;
+        if (typeof val === 'object' && val !== null && !Array.isArray(val) && Object.keys(val).length > 0) {
+          Object.assign(res, flattenObject(val, newKey));
+        } else {
+          res[newKey] = val;
+        }
+      }
+      return res;
+    }
+
+    // 新增文字輸入卡片
+    function addTextFileSlot(name = `file-${filesData.length + 1}.yml`, content = '') {
+      const id = Date.now() + Math.random().toString(36).substring(2, 7);
+      filesData.push({ id, name, content, flat: {} });
+      renderFileSlots();
+      runAnalysis();
+    }
+
+    function removeSlot(id) {
+      filesData = filesData.filter(f => f.id !== id);
+      renderFileSlots();
+      runAnalysis();
+    }
+
+    function onSlotContentChange(id, newContent) {
+      const item = filesData.find(f => f.id === id);
+      if (item) {
+        item.content = newContent;
+        runAnalysis();
+      }
+    }
+
+    function onSlotNameChange(id, newName) {
+      const item = filesData.find(f => f.id === id);
+      if (item) {
+        item.name = newName;
+        renderTable();
+      }
+    }
+
+    function renderFileSlots() {
+      const container = document.getElementById('files-container');
+      container.innerHTML = filesData.map((f, idx) => `
+        <div class="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2 flex flex-col">
+          <div class="flex justify-between items-center gap-2">
+            <input type="text" value="${escapeHtml(f.name)}" oninput="onSlotNameChange('${f.id}', this.value)" class="text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <button onclick="removeSlot('${f.id}')" class="text-slate-400 hover:text-rose-600 text-xs px-1" title="移除此檔案">✕</button>
+          </div>
+          <textarea rows="8" oninput="onSlotContentChange('${f.id}', this.value)" placeholder="貼上 YAML 內容..." class="w-full flex-1 font-mono-num text-xs p-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">${escapeHtml(f.content)}</textarea>
+        </div>
+      `).join('');
+    }
+
+    function handleFiles(event) {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      let remaining = files.length;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          filesData.push({
+            id: Date.now() + Math.random().toString(36).substring(2, 7),
+            name: file.name,
+            content: ev.target.result,
+            flat: {}
+          });
+          remaining--;
+          if (remaining === 0) {
+            renderFileSlots();
+            runAnalysis();
+          }
+        };
+        reader.readAsText(file);
+      });
+      event.target.value = '';
+    }
+
+    function runAnalysis() {
+      filesData.forEach(f => {
+        try {
+          const parsed = parseYAML(f.content);
+          f.flat = flattenObject(parsed);
+        } catch (e) {
+          f.flat = {};
+        }
+      });
+      renderTable();
+    }
+
+    function setFilter(filterType) {
+      currentFilter = filterType;
+      ['diff', 'missing', 'all'].forEach(t => {
+        const btn = document.getElementById(`filter-${t}`);
+        if (t === filterType) {
+          btn.className = 'px-2.5 py-1 font-bold rounded bg-blue-600 text-white shadow-xs';
+        } else {
+          btn.className = 'px-2.5 py-1 font-semibold rounded bg-white border border-slate-300 text-slate-700 hover:text-slate-900';
+        }
+      });
+      renderTable();
+    }
+
+    function renderTable() {
+      const thead = document.getElementById('table-head');
+      const tbody = document.getElementById('table-body');
+      const searchTerm = document.getElementById('filter-search').value.toLowerCase().trim();
+
+      if (filesData.length === 0) {
+        thead.innerHTML = '';
+        tbody.innerHTML = '<tr><td class="p-4 text-center text-slate-400 font-sans">請新增或載入至少 2 個 YAML 檔案進行比對</td></tr>';
+        return;
+      }
+
+      // 提取全部唯一的 Key
+      const allKeysSet = new Set();
+      filesData.forEach(f => {
+        Object.keys(f.flat).forEach(k => allKeysSet.add(k));
+      });
+      const allKeys = Array.from(allKeysSet).sort();
+
+      // 表頭
+      let thHtml = `<tr><th class="p-3 w-1/4">屬性鍵名 (Property Path)</th>`;
+      filesData.forEach(f => {
+        thHtml += `<th class="p-3 border-l border-slate-200">${escapeHtml(f.name)}</th>`;
+      });
+      thHtml += `<th class="p-3 w-24 text-center border-l border-slate-200">狀態</th></tr>`;
+      thead.innerHTML = thHtml;
+
+      // 行過濾比對
+      let rowsHtml = '';
+      let matchCount = 0;
+
+      allKeys.forEach(k => {
+        const values = filesData.map(f => f.flat[k]);
+        const existsCount = values.filter(v => v !== undefined).length;
+        const isMissing = existsCount > 0 && existsCount < filesData.length;
+
+        // 比對已有值是否相同
+        const presentValues = values.filter(v => v !== undefined);
+        const allSameValue = presentValues.every(val => JSON.stringify(val) === JSON.stringify(presentValues[0]));
+        const isDiff = !allSameValue || isMissing;
+
+        // 依過濾器決定是否顯示
+        if (currentFilter === 'diff' && !isDiff) return;
+        if (currentFilter === 'missing' && !isMissing) return;
+
+        // 依搜尋字元過濾
+        if (searchTerm) {
+          const matchKey = k.toLowerCase().includes(searchTerm);
+          const matchVal = values.some(v => v !== undefined && String(v).toLowerCase().includes(searchTerm));
+          if (!matchKey && !matchVal) return;
+        }
+
+        matchCount++;
+
+        // 決定狀態標籤
+        let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500">相同</span>';
+        let rowBg = 'hover:bg-slate-50';
+        if (isMissing) {
+          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] bg-amber-100 text-amber-800 font-semibold">遺漏/額外</span>';
+          rowBg = 'bg-amber-50/40 hover:bg-amber-50';
+        } else if (!allSameValue) {
+          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] bg-rose-100 text-rose-800 font-semibold">數值相異</span>';
+          rowBg = 'bg-rose-50/40 hover:bg-rose-50';
+        }
+
+        rowsHtml += `<tr class="${rowBg} transition-colors">`;
+        rowsHtml += `<td class="p-3 font-semibold text-slate-800 break-all select-all">${escapeHtml(k)}</td>`;
+
+        values.forEach(v => {
+          if (v === undefined) {
+            rowsHtml += `<td class="p-3 border-l border-slate-200 text-slate-300 italic select-none">‹未定義 (missing)›</td>`;
+          } else {
+            const displayVal = typeof v === 'object' ? JSON.stringify(v) : String(v);
+            rowsHtml += `<td class="p-3 border-l border-slate-200 text-slate-700 break-all font-mono-num">${escapeHtml(displayVal)}</td>`;
+          }
+        });
+
+        rowsHtml += `<td class="p-3 text-center border-l border-slate-200">${statusBadge}</td></tr>`;
+      });
+
+      if (matchCount === 0) {
+        tbody.innerHTML = `<tr><td class="p-4 text-center text-slate-400 font-sans" colspan="${filesData.length + 2}">在此過濾條件下無任何相異屬性</td></tr>`;
+      } else {
+        tbody.innerHTML = rowsHtml;
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function copyMarkdownSummary(btn) {
+      if (!filesData.length) return;
+      const allKeysSet = new Set();
+      filesData.forEach(f => Object.keys(f.flat).forEach(k => allKeysSet.add(k)));
+      const allKeys = Array.from(allKeysSet).sort();
+
+      let md = `| Property | ${filesData.map(f => f.name).join(' | ')} | Status |\n`;
+      md += `| :--- | ${filesData.map(() => ':---').join(' | ')} | :---: |\n`;
+
+      allKeys.forEach(k => {
+        const values = filesData.map(f => f.flat[k]);
+        const existsCount = values.filter(v => v !== undefined).length;
+        const isMissing = existsCount > 0 && existsCount < filesData.length;
+        const presentValues = values.filter(v => v !== undefined);
+        const allSame = presentValues.every(val => JSON.stringify(val) === JSON.stringify(presentValues[0]));
+        const isDiff = !allSame || isMissing;
+
+        if (currentFilter === 'diff' && !isDiff) return;
+        if (currentFilter === 'missing' && !isMissing) return;
+
+        const status = isMissing ? 'MISSING' : (!allSame ? 'DIFF' : 'SAME');
+        const rowVals = values.map(v => v === undefined ? '-' : JSON.stringify(v));
+        md += `| ${k} | ${rowVals.join(' | ')} | ${status} |\n`;
+      });
+
+      navigator.clipboard.writeText(md).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '✓ 已複製表格';
+        setTimeout(() => btn.innerHTML = orig, 1500);
+      });
+    }
+
+    function loadSample() {
+      filesData = [
+        {
+          id: 'dev',
+          name: 'application-dev.yml',
+          content: `server:\n  port: 8080\n  debug: true\ndatabase:\n  host: 127.0.0.1\n  pool:\n    min: 2\n    max: 10\nlogging:\n  level: DEBUG`,
+          flat: {}
+        },
+        {
+          id: 'uat',
+          name: 'application-uat.yml',
+          content: `server:\n  port: 8080\n  debug: false\ndatabase:\n  host: uat-db.internal\n  pool:\n    min: 5\n    max: 20\nlogging:\n  level: INFO`,
+          flat: {}
+        },
+        {
+          id: 'prod',
+          name: 'application-prod.yml',
+          content: `server:\n  port: 8443\n  debug: false\ndatabase:\n  host: prod-cluster.internal\n  pool:\n    min: 10\n    max: 50\nmetrics:\n  enabled: true`,
+          flat: {}
+        }
+      ];
+      renderFileSlots();
+      runAnalysis();
+    }
+
+    function clearAll() {
+      filesData = [];
+      renderFileSlots();
+      renderTable();
+    }
+
+    window.addEventListener('DOMContentLoaded', loadSample);
+  </script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>正規表達式即時測試器 - 離線工具箱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+    
+    /* 匹配結果高亮標記 */
+    .match-highlight-0 { background-color: #fef08a; color: #854d0e; border-bottom: 2px solid #eab308; }
+    .match-highlight-1 { background-color: #bfdbfe; color: #1e40af; border-bottom: 2px solid #3b82f6; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-3 lg:p-5 min-h-screen">
+  <div class="max-w-[1720px] mx-auto">
+    <div id="header-mount"></div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6 space-y-4">
+      
+      <!-- 標題列 -->
+      <div class="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-slate-200">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">正規表達式即時測試器 (Regex Tester)</h2>
+          <p class="text-xs text-slate-500">鍵入 Pattern 即時匹配高亮、擷取分組與預覽文本替換</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="regex-presets" onchange="applyPreset(this.value)" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300">
+            <option value="">常用正則範本...</option>
+            <option value="email">電子郵件 (Email)</option>
+            <option value="url">網址 (URL)</option>
+            <option value="ipv4">IPv4 地址</option>
+            <option value="date">日期 (YYYY-MM-DD)</option>
+            <option value="phone">手機號碼 (8位數)</option>
+          </select>
+          <button onclick="clearAll()" class="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-lg border border-slate-300 transition-colors">清空</button>
+        </div>
+      </div>
+
+      <!-- 正則 Pattern 與 Flags 輸入條 -->
+      <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+        <div class="flex items-center gap-2 bg-white px-3 py-2 border border-slate-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
+          <span class="text-slate-400 font-mono text-base font-bold select-none">/</span>
+          <input type="text" id="regex-pattern" oninput="runRegex()" value="([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})" placeholder="鍵入正規表達式 Pattern..." class="flex-1 font-mono-num text-sm bg-transparent focus:outline-none text-slate-900 font-medium">
+          <span class="text-slate-400 font-mono text-base font-bold select-none">/</span>
+          <input type="text" id="regex-flags" oninput="runRegex()" value="g" placeholder="flags" class="w-12 font-mono-num text-sm bg-transparent focus:outline-none text-blue-600 font-bold text-center">
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-3">
+            <span class="text-slate-500 font-medium">旗標 (Flags):</span>
+            <label class="flex items-center gap-1 cursor-pointer select-none"><input type="checkbox" id="flag-g" checked onchange="updateFlagsFromCheckbox()" class="rounded text-blue-600"> <span>g (全域)</span></label>
+            <label class="flex items-center gap-1 cursor-pointer select-none"><input type="checkbox" id="flag-i" onchange="updateFlagsFromCheckbox()" class="rounded text-blue-600"> <span>i (忽略大小寫)</span></label>
+            <label class="flex items-center gap-1 cursor-pointer select-none"><input type="checkbox" id="flag-m" onchange="updateFlagsFromCheckbox()" class="rounded text-blue-600"> <span>m (多行)</span></label>
+            <label class="flex items-center gap-1 cursor-pointer select-none"><input type="checkbox" id="flag-s" onchange="updateFlagsFromCheckbox()" class="rounded text-blue-600"> <span>s (單行/點匹配換行)</span></label>
+          </div>
+          <div id="status-regex" class="font-mono-num font-medium text-emerald-600">✓ 正則表達式語法有效</div>
+        </div>
+      </div>
+
+      <!-- 核心工作區：測試文字 & 高亮即時預覽 -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div>
+          <div class="flex justify-between items-center text-xs font-bold text-slate-700 mb-1.5">
+            <span>測試文本 (Test String)</span>
+            <span id="stat-text-len" class="font-mono-num font-normal text-slate-400">0 字元</span>
+          </div>
+          <textarea id="regex-text" rows="10" oninput="runRegex()" class="w-full font-mono-num text-xs sm:text-sm p-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center text-xs font-bold text-slate-700 mb-1.5">
+            <span>即時匹配高亮預覽</span>
+            <span id="match-summary" class="font-mono-num text-blue-600 font-bold">共 0 處匹配</span>
+          </div>
+          <div id="highlight-view" class="w-full h-[225px] overflow-auto font-mono-num text-xs sm:text-sm p-3.5 bg-slate-100/70 border border-slate-300 rounded-xl whitespace-pre-wrap break-all"></div>
+        </div>
+      </div>
+
+      <!-- 匹配結果分組 (Capture Groups) 詳情 -->
+      <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
+        <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between items-center">
+          <span>匹配項與分組詳情 (Match Details & Groups)</span>
+          <span class="text-slate-400 font-normal">自動列出 $1, $2 等捕獲組</span>
+        </div>
+        <div id="groups-list" class="p-3 max-h-[220px] overflow-y-auto space-y-2 text-xs font-mono-num">
+          <div class="text-slate-400 p-2">暫無匹配項</div>
+        </div>
+      </div>
+
+      <!-- 文本替換功能 (Regex Replace) -->
+      <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex-1 min-w-[200px]">
+            <label class="block text-xs font-bold text-slate-700 mb-1">替換為 (Replacement String，支援 $1, $2...)</label>
+            <input type="text" id="replace-pattern" oninput="runRegex()" placeholder="例如：[$1] 或 *****" class="w-full font-mono-num text-xs sm:text-sm p-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="flex items-end">
+            <button onclick="Utils.copyText('replace-out', this)" class="px-3.5 py-2 bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors">複製替換結果</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">替換後預覽 (Result Preview):</label>
+          <textarea id="replace-out" rows="3" readonly class="w-full font-mono-num text-xs p-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none"></textarea>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="nav.js"></script>
+  <script>
+    function updateCheckboxFromFlags(flags) {
+      document.getElementById('flag-g').checked = flags.includes('g');
+      document.getElementById('flag-i').checked = flags.includes('i');
+      document.getElementById('flag-m').checked = flags.includes('m');
+      document.getElementById('flag-s').checked = flags.includes('s');
+    }
+
+    function updateFlagsFromCheckbox() {
+      let flags = '';
+      if (document.getElementById('flag-g').checked) flags += 'g';
+      if (document.getElementById('flag-i').checked) flags += 'i';
+      if (document.getElementById('flag-m').checked) flags += 'm';
+      if (document.getElementById('flag-s').checked) flags += 's';
+      document.getElementById('regex-flags').value = flags;
+      runRegex();
+    }
+
+    function runRegex() {
+      const pat = document.getElementById('regex-pattern').value;
+      const flags = document.getElementById('regex-flags').value;
+      const text = document.getElementById('regex-text').value;
+      const replacePat = document.getElementById('replace-pattern').value;
+      const statusEl = document.getElementById('status-regex');
+      const hlEl = document.getElementById('highlight-view');
+      const groupsEl = document.getElementById('groups-list');
+      const replaceEl = document.getElementById('replace-out');
+      const countEl = document.getElementById('match-summary');
+
+      document.getElementById('stat-text-len').textContent = `${text.length} 字元`;
+      updateCheckboxFromFlags(flags);
+
+      if (!pat) {
+        statusEl.textContent = '請輸入 Regex Pattern';
+        statusEl.className = 'font-mono-num font-medium text-slate-400';
+        hlEl.textContent = text;
+        groupsEl.innerHTML = '<div class="text-slate-400 p-2">等待輸入正則表達式...</div>';
+        replaceEl.value = text;
+        countEl.textContent = '共 0 處匹配';
+        return;
+      }
+
+      let regex;
+      try {
+        regex = new RegExp(pat, flags);
+        statusEl.textContent = '✓ 正則表達式語法有效';
+        statusEl.className = 'font-mono-num font-medium text-emerald-600';
+      } catch (e) {
+        statusEl.textContent = `✕ 語法錯誤: ${e.message}`;
+        statusEl.className = 'font-mono-num font-medium text-rose-600';
+        hlEl.textContent = text;
+        return;
+      }
+
+      if (!text) {
+        hlEl.textContent = '';
+        groupsEl.innerHTML = '<div class="text-slate-400 p-2">測試文本為空</div>';
+        replaceEl.value = '';
+        countEl.textContent = '共 0 處匹配';
+        return;
+      }
+
+      // 提取匹配與分組
+      const matches = [];
+      let m;
+      if (flags.includes('g')) {
+        while ((m = regex.exec(text)) !== null) {
+          matches.push(m);
+          if (m.index === regex.lastIndex) regex.lastIndex++;
+        }
+      } else {
+        m = regex.exec(text);
+        if (m) matches.push(m);
+      }
+
+      countEl.textContent = `共 ${matches.length} 處匹配`;
+
+      // 1. 建置高亮 HTML
+      let lastIdx = 0;
+      let hlHtml = '';
+      matches.forEach((item, idx) => {
+        const start = item.index;
+        const matchStr = item[0];
+        const end = start + matchStr.length;
+
+        hlHtml += escapeHtml(text.slice(lastIdx, start));
+        const colorClass = idx % 2 === 0 ? 'match-highlight-0' : 'match-highlight-1';
+        hlHtml += `<mark class="${colorClass} rounded px-0.5" title="Match #${idx+1} (Index: ${start}~${end})">${escapeHtml(matchStr)}</mark>`;
+        lastIdx = end;
+      });
+      hlHtml += escapeHtml(text.slice(lastIdx));
+      hlEl.innerHTML = hlHtml;
+
+      // 2. 建置分組清單
+      if (matches.length === 0) {
+        groupsEl.innerHTML = '<div class="text-slate-400 p-2">未找到任何匹配項目</div>';
+      } else {
+        groupsEl.innerHTML = matches.map((matchItem, idx) => {
+          const full = matchItem[0];
+          const groups = matchItem.slice(1);
+          return `
+            <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+              <div class="flex justify-between items-center mb-1">
+                <span class="font-bold text-blue-700">#${idx + 1}: "${escapeHtml(full)}"</span>
+                <span class="text-slate-400 text-[11px]">位置: ${matchItem.index} ~ ${matchItem.index + full.length}</span>
+              </div>
+              ${groups.length > 0 ? `
+                <div class="pl-2 border-l-2 border-blue-200 space-y-0.5 mt-1 text-[11px] text-slate-600">
+                  ${groups.map((g, gIdx) => `<div><span class="text-slate-400">$${gIdx + 1}:</span> <span class="text-emerald-700 font-semibold">${g !== undefined ? escapeHtml(g) : '<em>undefined</em>'}</span></div>`).join('')}
+                </div>
+              ` : '<span class="text-[11px] text-slate-400">（無捕獲分組）</span>'}
+            </div>
+          `;
+        }).join('');
+      }
+
+      // 3. 執行替換運算
+      try {
+        replaceEl.value = text.replace(regex, replacePat);
+      } catch (e) {
+        replaceEl.value = '替換模式有誤';
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function applyPreset(type) {
+      const presets = {
+        email: {
+          pat: '([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})',
+          flags: 'g',
+          sample: '聯絡客服請發信到 support@example.com 或 admin@mail.org.hk。'
+        },
+        url: {
+          pat: 'https?:\\/\\/([\\w.-]+)(:[0-9]+)?(\\/[\\w_.-]*)*(\\?[\\w_=&.-]*)?',
+          flags: 'g',
+          sample: 'API 文件位於 https://api.service.io/v1/users?limit=10 或 http://localhost:8080。'
+        },
+        ipv4: {
+          pat: '\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b',
+          flags: 'g',
+          sample: '伺服器 IP: 192.168.1.1, 閘道: 10.0.0.254, 外部主機: 8.8.8.8。'
+        },
+        date: {
+          pat: '(\\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])',
+          flags: 'g',
+          sample: '專案啟動日: 2026-03-15，預計發布日: 2026-10-31。'
+        },
+        phone: {
+          pat: '\\b[569]\\d{7}\\b',
+          flags: 'g',
+          sample: '香港電話範例: 91234567, 51234567, 辦公室代表號: 21234567 (非手機)。'
+        }
+      };
+
+      if (!presets[type]) return;
+      document.getElementById('regex-pattern').value = presets[type].pat;
+      document.getElementById('regex-flags').value = presets[type].flags;
+      document.getElementById('regex-text').value = presets[type].sample;
+      runRegex();
+    }
+
+    function clearAll() {
+      document.getElementById('regex-pattern').value = '';
+      document.getElementById('regex-text').value = '';
+      document.getElementById('replace-pattern').value = '';
+      runRegex();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('regex-text').value = 'Simon: simon@work.com\nBenny: benny_test@hk.net\nDenton: invalid-email@\nTommy: tommy.li@company.org';
+      runRegex();
+    });
+  </script>
+</body>
+</html>
