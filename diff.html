@@ -20,62 +20,115 @@
       <div class="flex justify-between items-center pb-3 border-b border-slate-200">
         <div>
           <h2 class="text-base font-bold text-slate-800">文本差異比對器 (Diff)</h2>
-          <p class="text-xs text-slate-500">以行爲單位對比文字出入，支援增減標記</p>
+          <p class="text-xs text-slate-500">鍵入或貼上內容即時自動比對，以行爲單位對比文字出入</p>
         </div>
-        <button onclick="loadSample()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs font-semibold rounded-lg border border-slate-300">範例比對</button>
+        <div class="flex gap-2">
+          <button onclick="loadSample()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs font-semibold rounded-lg border border-slate-300 transition-colors">範例比對</button>
+          <button onclick="clearAll()" class="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-lg border border-slate-300 transition-colors">清空</button>
+        </div>
       </div>
 
+      <!-- 雙欄輸入區（輸入即時運算） -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-bold text-slate-600 mb-1">原始文本 (Original)</label>
-          <textarea id="t-orig" rows="7" class="w-full font-mono-num text-sm p-3 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          <div class="flex justify-between items-center text-xs font-bold text-slate-600 mb-1">
+            <span>原始文本 (Original)</span>
+            <span id="stat-orig" class="font-mono-num font-normal text-slate-400">0 行 • 0 字元</span>
+          </div>
+          <textarea id="t-orig" rows="7" oninput="runDiff()" placeholder="在此鍵入或貼上原始文本..." class="w-full font-mono-num text-sm p-3 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"></textarea>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-600 mb-1">修改後文本 (Modified)</label>
-          <textarea id="t-mod" rows="7" class="w-full font-mono-num text-sm p-3 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          <div class="flex justify-between items-center text-xs font-bold text-slate-600 mb-1">
+            <span>修改後文本 (Modified)</span>
+            <span id="stat-mod" class="font-mono-num font-normal text-slate-400">0 行 • 0 字元</span>
+          </div>
+          <textarea id="t-mod" rows="7" oninput="runDiff()" placeholder="在此鍵入或貼上修改後文本..." class="w-full font-mono-num text-sm p-3 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"></textarea>
         </div>
       </div>
 
-      <div class="flex justify-center">
-        <button onclick="runDiff()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-colors">開始比對</button>
-      </div>
-
-      <div id="diff-wrap" class="hidden border border-slate-200 rounded-xl overflow-hidden mt-3">
-        <div id="diff-out" class="font-mono-num text-xs p-4 bg-white divide-y divide-slate-100 max-h-[450px] overflow-auto"></div>
+      <!-- 即時比對結果區塊 -->
+      <div id="diff-wrap" class="border border-slate-200 rounded-xl overflow-hidden mt-3">
+        <div class="px-4 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center text-xs">
+          <span class="font-bold text-slate-700">即時比對結果</span>
+          <div id="diff-stats" class="font-mono-num flex items-center gap-3 text-slate-500">
+            <span>0 相同</span>
+            <span class="text-emerald-600 font-semibold">+0 新增</span>
+            <span class="text-rose-600 font-semibold">-0 刪除</span>
+          </div>
+        </div>
+        <div id="diff-out" class="font-mono-num text-xs p-4 bg-white divide-y divide-slate-100 max-h-[450px] overflow-auto">
+          <div class="text-slate-400 text-center py-6 font-sans">請在上方欄位輸入文字開始即時比對</div>
+        </div>
       </div>
     </div>
   </div>
 
   <script src="nav.js"></script>
   <script>
-    function runDiff() {
-      const o = document.getElementById('t-orig').value.split('\n');
-      const m = document.getElementById('t-mod').value.split('\n');
-      const wrap = document.getElementById('diff-wrap');
-      const out = document.getElementById('diff-out');
-      wrap.classList.remove('hidden');
+    function escapeHtml(s) { 
+      return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); 
+    }
 
+    function runDiff() {
+      const origText = document.getElementById('t-orig').value;
+      const modText = document.getElementById('t-mod').value;
+      const out = document.getElementById('diff-out');
+      const statsEl = document.getElementById('diff-stats');
+
+      // 更新輸入框統計字數
+      const oLinesCount = origText ? origText.split('\n').length : 0;
+      const mLinesCount = modText ? modText.split('\n').length : 0;
+      document.getElementById('stat-orig').textContent = `${oLinesCount} 行 • ${origText.length} 字元`;
+      document.getElementById('stat-mod').textContent = `${mLinesCount} 行 • ${modText.length} 字元`;
+
+      if (!origText && !modText) {
+        out.innerHTML = '<div class="text-slate-400 text-center py-6 font-sans">請在上方欄位輸入文字開始即時比對</div>';
+        statsEl.innerHTML = '<span>0 相同</span><span class="text-emerald-600 font-semibold">+0 新增</span><span class="text-rose-600 font-semibold">-0 刪除</span>';
+        return;
+      }
+
+      const o = origText.split('\n');
+      const m = modText.split('\n');
       const maxLen = Math.max(o.length, m.length);
+
       let html = '';
+      let sameCount = 0;
+      let addCount = 0;
+      let delCount = 0;
 
       for (let idx = 0; idx < maxLen; idx++) {
         const l1 = o[idx];
         const l2 = m[idx];
 
         if (l1 === l2) {
-          html += `<div class="py-1 px-2 text-slate-600 flex gap-3"><span class="w-8 text-slate-300 text-right select-none">${idx+1}</span><span class="w-3 text-slate-300 font-mono"> </span><span>${escape(l1 || '')}</span></div>`;
+          sameCount++;
+          html += `<div class="py-1 px-2 text-slate-600 flex gap-3 hover:bg-slate-50 transition-colors">
+            <span class="w-8 text-slate-300 text-right select-none font-mono">${idx + 1}</span>
+            <span class="w-3 text-slate-300 font-mono select-none"> </span>
+            <span class="break-all">${escapeHtml(l1)}</span>
+          </div>`;
         } else {
           if (l1 !== undefined) {
-            html += `<div class="py-1 px-2 bg-rose-50 text-rose-800 flex gap-3 border-l-4 border-rose-500"><span class="w-8 text-rose-400 text-right select-none">${idx+1}</span><span class="w-3 font-bold text-rose-500 font-mono">-</span><span>${escape(l1)}</span></div>`;
+            delCount++;
+            html += `<div class="py-1 px-2 bg-rose-50 text-rose-800 flex gap-3 border-l-4 border-rose-500">
+              <span class="w-8 text-rose-400 text-right select-none font-mono">${idx + 1}</span>
+              <span class="w-3 font-bold text-rose-500 font-mono select-none">-</span>
+              <span class="break-all">${escapeHtml(l1)}</span>
+            </div>`;
           }
           if (l2 !== undefined) {
-            html += `<div class="py-1 px-2 bg-emerald-50 text-emerald-800 flex gap-3 border-l-4 border-emerald-500"><span class="w-8 text-emerald-400 text-right select-none">${idx+1}</span><span class="w-3 font-bold text-emerald-500 font-mono">+</span><span>${escape(l2)}</span></div>`;
+            addCount++;
+            html += `<div class="py-1 px-2 bg-emerald-50 text-emerald-800 flex gap-3 border-l-4 border-emerald-500">
+              <span class="w-8 text-emerald-400 text-right select-none font-mono">${idx + 1}</span>
+              <span class="w-3 font-bold text-emerald-500 font-mono select-none">+</span>
+              <span class="break-all">${escapeHtml(l2)}</span>
+            </div>`;
           }
         }
       }
 
       out.innerHTML = html;
-      function escape(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+      statsEl.innerHTML = `<span>${sameCount} 相同</span><span class="text-emerald-600 font-semibold">+${addCount} 新增</span><span class="text-rose-600 font-semibold">-${delCount} 刪除</span>`;
     }
 
     function loadSample() {
@@ -83,6 +136,16 @@
       document.getElementById('t-mod').value = `1. Simon 00:45\n2. Denton 01:00\n3. Benny 19:00 (改時)\n4. Tommy 02:00 (新增)`;
       runDiff();
     }
+
+    function clearAll() {
+      document.getElementById('t-orig').value = '';
+      document.getElementById('t-mod').value = '';
+      runDiff();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      runDiff();
+    });
   </script>
 </body>
 </html>
