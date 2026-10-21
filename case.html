@@ -40,35 +40,60 @@
 
   <script src="nav.js"></script>
   <script>
+    function getWords(str) {
+      if (!str) return [];
+      return str
+        .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+        .replace(/([A-Z]+)([A-Z][a-z\d]+)/g, '$1 $2')
+        .replace(/[-_.\/\\]+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    }
+
     const defs = [
       { id: 'upper', name: 'UPPERCASE', desc: '全部大寫', fn: s => s.toUpperCase() },
       { id: 'lower', name: 'lowercase', desc: '全部小寫', fn: s => s.toLowerCase() },
       { id: 'title', name: 'Title Case', desc: '標題大寫', fn: s => {
-        const m = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to']);
-        return s.toLowerCase().replace(/[A-Za-z0-9]+('[A-Za-z]+)?/g, (w, _, off) => (off !== 0 && m.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1));
+        const minor = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to']);
+        const w = s.toLowerCase().split(/\s+/);
+        return w.map((word, i) => {
+          if (i !== 0 && minor.has(word)) return word;
+          return word.charAt(0).toUpperCase() + word.slice(1);
+        }).join(' ');
       }},
-      { id: 'sentence', name: 'Sentence case', desc: '句首大寫', fn: s => s.toLowerCase().replace(/(^\s*|\.\s*|\?\s*|\!\s*)([a-z])/g, (_, p, c) => p + c.toUpperCase()) },
-      { id: 'camel', name: 'camelCase', desc: '小駝峰', fn: s => words(s).map((x, i) => i === 0 ? x.toLowerCase() : x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join('') },
-      { id: 'pascal', name: 'PascalCase', desc: '大駝峰', fn: s => words(s).map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join('') },
-      { id: 'snake', name: 'snake_case', desc: '蛇形下劃線', fn: s => words(s).map(x => x.toLowerCase()).join('_') },
-      { id: 'kebab', name: 'kebab-case', desc: '連字符烤肉串', fn: s => words(s).map(x => x.toLowerCase()).join('-') },
-      { id: 'constant', name: 'CONSTANT_CASE', desc: '全大寫常量', fn: s => words(s).map(x => x.toUpperCase()).join('_') },
+      { id: 'sentence', name: 'Sentence case', desc: '句首大寫', fn: s => {
+        return s.toLowerCase().replace(/(^\s*|\.\s*|\?\s*|\!\s*)([a-z])/g, (_, p, c) => p + c.toUpperCase());
+      }},
+      { id: 'camel', name: 'camelCase', desc: '小駝峰', fn: s => {
+        const w = getWords(s);
+        return w.map((x, i) => i === 0 ? x.toLowerCase() : x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join('');
+      }},
+      { id: 'pascal', name: 'PascalCase', desc: '大駝峰', fn: s => {
+        return getWords(s).map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join('');
+      }},
+      { id: 'snake', name: 'snake_case', desc: '蛇形下劃線', fn: s => {
+        return getWords(s).map(x => x.toLowerCase()).join('_');
+      }},
+      { id: 'kebab', name: 'kebab-case', desc: '連字符烤肉串', fn: s => {
+        return getWords(s).map(x => x.toLowerCase()).join('-');
+      }},
+      { id: 'constant', name: 'CONSTANT_CASE', desc: '全大寫常量', fn: s => {
+        return getWords(s).map(x => x.toUpperCase()).join('_');
+      }},
       { id: 'alt', name: 'aLtErNaTe', desc: '交替大小寫', fn: s => {
-        let u = false; return s.split('').map(c => /[a-zA-Z]/.test(c) ? ((u = !u) ? c.toLowerCase() : c.toUpperCase()) : c).join('');
+        let u = false;
+        return s.split('').map(c => /[a-zA-Z]/.test(c) ? ((u = !u) ? c.toLowerCase() : c.toUpperCase()) : c).join('');
       }}
     ];
-
-    function words(str) {
-      return str.replace(/([a-z\d])([A-Z])/g, '$1 $2').replace(/[-_.\/\\]+/g, ' ').trim().split(/\s+/).filter(Boolean);
-    }
 
     function init() {
       const wrap = document.getElementById('cards-wrap');
       wrap.innerHTML = defs.map(d => `
-        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 hover:border-blue-400">
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 hover:border-blue-400 transition-colors">
           <div class="flex justify-between items-center mb-1.5">
             <span class="font-bold text-sm text-slate-800">${d.name} <span class="text-xs text-slate-400 font-normal">(${d.desc})</span></span>
-            <button onclick="Utils.copyText('res-${d.id}', this)" class="px-2 py-0.5 bg-white text-blue-600 border border-slate-200 text-xs font-semibold rounded shadow-xs">複製</button>
+            <button onclick="Utils.copyText('res-${d.id}', this)" class="px-2 py-0.5 bg-white text-blue-600 border border-slate-200 text-xs font-semibold rounded shadow-xs hover:bg-blue-50">複製</button>
           </div>
           <textarea id="res-${d.id}" readonly rows="2" placeholder="等待輸入..." class="w-full font-mono-num text-sm bg-white p-2 rounded-lg border border-slate-200 focus:outline-none resize-none"></textarea>
         </div>
@@ -78,15 +103,27 @@
     function convert() {
       const v = document.getElementById('case-in').value;
       document.getElementById('st-chars').textContent = `${v.length} 字元`;
-      document.getElementById('st-words').textContent = `${v.trim() ? v.trim().split(/\s+/).length : 0} 單詞`;
+      document.getElementById('st-words').textContent = `${v.trim() ? getWords(v).length : 0} 單詞`;
       document.getElementById('st-lines').textContent = `${v ? v.split(/\n/).length : 0} 行`;
-      defs.forEach(d => { document.getElementById(`res-${d.id}`).value = v ? d.fn(v) : ''; });
+      defs.forEach(d => { 
+        document.getElementById(`res-${d.id}`).value = v ? d.fn(v) : ''; 
+      });
     }
 
-    function clearText() { document.getElementById('case-in').value = ''; convert(); }
-    function setSample() { document.getElementById('case-in').value = 'hello world! this is an API client_secret_key'; convert(); }
+    function clearText() { 
+      document.getElementById('case-in').value = ''; 
+      convert(); 
+    }
+    
+    function setSample() { 
+      document.getElementById('case-in').value = 'hello world! this is an API client_secret_key'; 
+      convert(); 
+    }
 
-    window.addEventListener('DOMContentLoaded', () => { init(); setSample(); });
+    window.addEventListener('DOMContentLoaded', () => { 
+      init(); 
+      setSample(); 
+    });
   </script>
 </body>
 </html>
