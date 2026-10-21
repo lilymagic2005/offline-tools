@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8"><title>單位換算器 - 離線工具箱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+    input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+    .tooltip-container { position: relative; display: inline-flex; align-items: center; }
+    .tooltip-box { visibility: hidden; opacity: 0; transition: opacity .2s; position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 50; width: max-content; max-width: 250px; pointer-events: none; }
+    .tooltip-container:hover .tooltip-box { visibility: visible; opacity: 1; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-3 lg:p-5 min-h-screen">
+  <div class="max-w-[1720px] mx-auto">
+    <div id="header-mount"></div>
+
+    <div class="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm mb-4">
+      <div>
+        <h2 class="text-sm md:text-base font-bold text-slate-800">即時多維單位換算器</h2>
+        <p class="text-xs text-slate-500">任意欄位鍵入數值即時聯動 • 懸停 <span class="text-blue-600 font-bold">ⓘ</span> 查看公式</p>
+      </div>
+      <button onclick="UnitConverterApp.resetAll()" class="px-3.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-lg border border-slate-300">全部清空</button>
+    </div>
+
+    <main class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" id="cards-grid"></main>
+  </div>
+
+  <script src="nav.js"></script>
+  <script>
+    const UnitConverterApp = {
+      config: {
+        length: { name: '📏 長度 (Length)', color: 'text-blue-700', units: [
+          { key: 'm', name: '公尺 (m)', rate: 1, formula: '基準 (1 m = 100 cm)' },
+          { key: 'cm', name: '公分 (cm)', rate: 0.01, formula: '1 cm = 0.01 m' },
+          { key: 'km', name: '公里 (km)', rate: 1000, formula: '1 km = 1,000 m' },
+          { key: 'in', name: '英吋 (in)', rate: 0.0254, formula: '1 in = 2.54 cm' },
+          { key: 'ft', name: '英呎 (ft)', rate: 0.3048, formula: '1 ft = 12 in' },
+          { key: 'yd', name: '碼 (yd)', rate: 0.9144, formula: '1 yd = 3 ft' },
+          { key: 'mi', name: '英里 (mi)', rate: 1609.344, formula: '1 mi ≈ 1.609 km' }
+        ]},
+        weight: { name: '⚖️ 重量 (Weight)', color: 'text-emerald-700', units: [
+          { key: 'kg', name: '公斤 (kg)', rate: 1, formula: '基準 (1 kg = 1,000 g)' },
+          { key: 'g', name: '公克 (g)', rate: 0.001, formula: '1 g = 0.001 kg' },
+          { key: 'lb', name: '磅 (lb)', rate: 0.45359237, formula: '1 lb ≈ 0.4536 kg' },
+          { key: 'oz', name: '盎司 (oz)', rate: 0.028349523, formula: '1 oz = 1/16 lb' },
+          { key: 'hk_cat', name: '香港司馬斤', rate: 0.60478982, formula: '1 斤 = 604.79 g' },
+          { key: 'tw_cat', name: '台灣台斤', rate: 0.6, formula: '1 台斤 = 600 g' }
+        ]},
+        area: { name: '🗺️ 面積 (Area)', color: 'text-amber-700', units: [
+          { key: 'm2', name: '平方公尺 (m²)', rate: 1, formula: '基準 (1 m × 1 m)' },
+          { key: 'sqft', name: '平方呎 (sq ft)', rate: 0.09290304, formula: '1 sq ft ≈ 0.0929 m²' },
+          { key: 'ping', name: '坪 (Ping)', rate: 3.305785, formula: '1 坪 ≈ 3.30579 m²' },
+          { key: 'ha', name: '公頃 (ha)', rate: 10000, formula: '1 ha = 10,000 m²' },
+          { key: 'acre', name: '英畝 (ac)', rate: 4046.8564, formula: '1 ac ≈ 4046.86 m²' }
+        ]},
+        volume: { name: '🧪 容量體積 (Volume)', color: 'text-cyan-700', units: [
+          { key: 'L', name: '公升 (L)', rate: 1, formula: '基準 (1 L = 1,000 mL)' },
+          { key: 'mL', name: '毫升 (mL)', rate: 0.001, formula: '1 mL = 0.001 L' },
+          { key: 'gal', name: '美制加侖 (gal)', rate: 3.7854117, formula: '1 gal ≈ 3.7854 L' },
+          { key: 'floz', name: '美制液體盎司', rate: 0.0295735, formula: '1 fl oz ≈ 29.57 mL' },
+          { key: 'm3', name: '立方公尺 (m³)', rate: 1000, formula: '1 m³ = 1,000 L' }
+        ]},
+        temp: { name: '🌡️ 溫度 (Temperature)', color: 'text-rose-700', units: [
+          { key: 'C', name: '攝氏 (°C)', formula: '°C = (°F - 32) × 5/9' },
+          { key: 'F', name: '華氏 (°F)', formula: '°F = (°C × 9/5) + 32' },
+          { key: 'K', name: '克氏 (K)', formula: 'K = °C + 273.15' }
+        ]},
+        speed: { name: '🚀 速度 (Speed)', color: 'text-indigo-700', units: [
+          { key: 'kmh', name: '公里/小時 (km/h)', rate: 1/3.6, formula: '1 km/h = 1/3.6 m/s' },
+          { key: 'mps', name: '公尺/秒 (m/s)', rate: 1, formula: '基準 (1 m/s = 3.6 km/h)' },
+          { key: 'mph', name: '英里/小時 (mph)', rate: 0.44704, formula: '1 mph ≈ 1.609 km/h' },
+          { key: 'knot', name: '節 (Knots)', rate: 0.514444, formula: '1 knot ≈ 1.852 km/h' }
+        ]},
+        data: { name: '💾 數據容量 (Data)', color: 'text-purple-700', units: [
+          { key: 'B', name: 'Bytes (B)', rate: 1/(1024*1024), formula: '1 Byte = 8 bits' },
+          { key: 'KB', name: 'KB', rate: 1/1024, formula: '1 KB = 1024 Bytes' },
+          { key: 'MB', name: 'MB', rate: 1, formula: '1 MB = 1024 KB' },
+          { key: 'GB', name: 'GB', rate: 1024, formula: '1 GB = 1024 MB' },
+          { key: 'TB', name: 'TB', rate: 1024*1024, formula: '1 TB = 1024 GB' }
+        ]},
+        time: { name: '⏱️ 時間 (Time)', color: 'text-teal-700', units: [
+          { key: 'ms', name: '毫秒 (ms)', rate: 0.001, formula: '1 ms = 0.001 s' },
+          { key: 's', name: '秒 (sec)', rate: 1, formula: '基準秒' },
+          { key: 'min', name: '分鐘 (min)', rate: 60, formula: '1 min = 60 s' },
+          { key: 'hr', name: '小時 (hr)', rate: 3600, formula: '1 hr = 3600 s' },
+          { key: 'day', name: '天 (day)', rate: 86400, formula: '1 day = 86400 s' }
+        ]}
+      },
+
+      init() {
+        const grid = document.getElementById('cards-grid');
+        grid.innerHTML = Object.entries(this.config).map(([catKey, cat]) => `
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+              <span class="text-base font-bold ${cat.color}">${cat.name}</span>
+              <button onclick="UnitConverterApp.clearCategory('${catKey}')" class="text-xs text-slate-400 hover:text-rose-500 font-medium px-2 py-0.5 rounded hover:bg-slate-100">清空</button>
+            </div>
+            <div class="space-y-2.5">
+              ${cat.units.map(u => `
+                <div class="flex items-center justify-between gap-2 bg-slate-50 hover:bg-slate-100/80 p-2 rounded-lg border border-slate-200/70 transition-all focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100">
+                  <div class="flex items-center gap-1.5 shrink-0 min-w-0">
+                    <span class="text-sm font-semibold text-slate-700 truncate">${u.name}</span>
+                    <div class="tooltip-container">
+                      <button type="button" class="text-slate-400 hover:text-blue-600 focus:outline-none p-0.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><line x1="12" y1="16" x2="12" y2="12" stroke-width="2"/><line x1="12" y1="8" x2="12.01" y2="8" stroke-width="2.5"/></svg>
+                      </button>
+                      <div class="tooltip-box bg-slate-900 text-white text-xs rounded-lg px-2.5 py-1.5 shadow-xl border border-slate-700">
+                        <p class="font-medium text-amber-300 mb-0.5">${u.name}</p><p class="text-slate-200">${u.formula}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <input type="number" step="any" id="input-${catKey}-${u.key}" placeholder="0" class="font-mono-num w-full text-right font-medium text-slate-900 bg-transparent text-[15px] focus:outline-none pr-1" oninput="UnitConverterApp.onInput('${catKey}', '${u.key}', this.value)" />
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+
+        const m = document.getElementById('input-length-m');
+        if (m) { m.value = '1'; this.onInput('length', 'm', '1'); }
+      },
+
+      format(n) {
+        if (!n && n !== 0) return '';
+        if (n === 0) return '0';
+        const a = Math.abs(n);
+        if (a >= 1e11 || (a > 0 && a < 1e-5)) return n.toExponential(4).replace(/\.0+e/, 'e');
+        return parseFloat(n.toPrecision(8)).toString();
+      },
+
+      onInput(cat, key, val) {
+        const num = parseFloat(val);
+        const has = val.trim() !== '' && !isNaN(num);
+        const cfg = this.config[cat];
+
+        if (cat === 'temp') {
+          let c = null;
+          if (has) {
+            if (key === 'C') c = num;
+            else if (key === 'F') c = (num - 32) * (5/9);
+            else if (key === 'K') c = num - 273.15;
+          }
+          cfg.units.forEach(u => {
+            if (u.key !== key) {
+              const el = document.getElementById(`input-temp-${u.key}`);
+              if (!has || c === null) el.value = '';
+              else {
+                let t = 0;
+                if (u.key === 'C') t = c;
+                else if (u.key === 'F') t = (c * 9/5) + 32;
+                else if (u.key === 'K') t = c + 273.15;
+                el.value = this.format(t);
+              }
+            }
+          });
+          return;
+        }
+
+        const baseVal = has ? num * cfg.units.find(u => u.key === key).rate : null;
+        cfg.units.forEach(u => {
+          if (u.key !== key) {
+            const el = document.getElementById(`input-${cat}-${u.key}`);
+            el.value = has && baseVal !== null ? this.format(baseVal / u.rate) : '';
+          }
+        });
+      },
+
+      clearCategory(k) {
+        this.config[k].units.forEach(u => { const el = document.getElementById(`input-${k}-${u.key}`); if (el) el.value = ''; });
+      },
+
+      resetAll() { Object.keys(this.config).forEach(k => this.clearCategory(k)); }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => UnitConverterApp.init());
+  </script>
+</body>
+</html>

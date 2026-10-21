@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8"><title>英文字體大小寫轉換 - 離線工具箱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html { overflow-y: scroll; scrollbar-gutter: stable; }
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-3 lg:p-5 min-h-screen">
+  <div class="max-w-[1720px] mx-auto">
+    <div id="header-mount"></div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6 space-y-4">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-200">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">英文大小寫轉換</h2>
+          <p class="text-xs text-slate-500">鍵入即可即時同步運算多種命名格式</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="setSample()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs font-semibold rounded-lg border border-slate-300">載入範例</button>
+          <button onclick="clearText()" class="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-xs rounded-lg border border-slate-300">清空</button>
+        </div>
+      </div>
+
+      <textarea id="case-in" rows="4" oninput="convert()" placeholder="在此鍵入英文句子或代碼變數名..." class="w-full font-mono-num text-base p-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+      
+      <div class="flex justify-end gap-3 text-xs text-slate-400 font-mono-num">
+        <span id="st-chars">0 字元</span> • <span id="st-words">0 單詞</span> • <span id="st-lines">0 行</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-2" id="cards-wrap"></div>
+    </div>
+  </div>
+
+  <script src="nav.js"></script>
+  <script>
+    const defs = [
+      { id: 'upper', name: 'UPPERCASE', desc: '全部大寫', fn: s => s.toUpperCase() },
+      { id: 'lower', name: 'lowercase', desc: '全部小寫', fn: s => s.toLowerCase() },
+      { id: 'title', name: 'Title Case', desc: '標題大寫', fn: s => {
+        const m = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to']);
+        return s.toLowerCase().replace(/[A-Za-z0-9]+('[A-Za-z]+)?/g, (w, _, off) => (off !== 0 && m.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1));
+      }},
+      { id: 'sentence', name: 'Sentence case', desc: '句首大寫', fn: s => s.toLowerCase().replace(/(^\s*|\.\s*|\?\s*|\!\s*)([a-z])/g, (_, p, c) => p + c.toUpperCase()) },
+      { id: 'camel', name: 'camelCase', desc: '小駝峰', fn: s => words(s).map((x, i) => i === 0 ? x.toLowerCase() : x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join('') },
+      { id: 'pascal', name: 'PascalCase', desc: '大駝峰', fn: s => words(s).map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join('') },
+      { id: 'snake', name: 'snake_case', desc: '蛇形下劃線', fn: s => words(s).map(x => x.toLowerCase()).join('_') },
+      { id: 'kebab', name: 'kebab-case', desc: '連字符烤肉串', fn: s => words(s).map(x => x.toLowerCase()).join('-') },
+      { id: 'constant', name: 'CONSTANT_CASE', desc: '全大寫常量', fn: s => words(s).map(x => x.toUpperCase()).join('_') },
+      { id: 'alt', name: 'aLtErNaTe', desc: '交替大小寫', fn: s => {
+        let u = false; return s.split('').map(c => /[a-zA-Z]/.test(c) ? ((u = !u) ? c.toLowerCase() : c.toUpperCase()) : c).join('');
+      }}
+    ];
+
+    function words(str) {
+      return str.replace(/([a-z\d])([A-Z])/g, '$1 $2').replace(/[-_.\/\\]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+    }
+
+    function init() {
+      const wrap = document.getElementById('cards-wrap');
+      wrap.innerHTML = defs.map(d => `
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 hover:border-blue-400">
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="font-bold text-sm text-slate-800">${d.name} <span class="text-xs text-slate-400 font-normal">(${d.desc})</span></span>
+            <button onclick="Utils.copyText('res-${d.id}', this)" class="px-2 py-0.5 bg-white text-blue-600 border border-slate-200 text-xs font-semibold rounded shadow-xs">複製</button>
+          </div>
+          <textarea id="res-${d.id}" readonly rows="2" placeholder="等待輸入..." class="w-full font-mono-num text-sm bg-white p-2 rounded-lg border border-slate-200 focus:outline-none resize-none"></textarea>
+        </div>
+      `).join('');
+    }
+
+    function convert() {
+      const v = document.getElementById('case-in').value;
+      document.getElementById('st-chars').textContent = `${v.length} 字元`;
+      document.getElementById('st-words').textContent = `${v.trim() ? v.trim().split(/\s+/).length : 0} 單詞`;
+      document.getElementById('st-lines').textContent = `${v ? v.split(/\n/).length : 0} 行`;
+      defs.forEach(d => { document.getElementById(`res-${d.id}`).value = v ? d.fn(v) : ''; });
+    }
+
+    function clearText() { document.getElementById('case-in').value = ''; convert(); }
+    function setSample() { document.getElementById('case-in').value = 'hello world! this is an API client_secret_key'; convert(); }
+
+    window.addEventListener('DOMContentLoaded', () => { init(); setSample(); });
+  </script>
+</body>
+</html>
